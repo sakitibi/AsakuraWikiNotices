@@ -15,7 +15,7 @@
         },
         "bundle": {
             "active": true,
-            "category": "AsakuraWikiNotices",
+            "category": "Utility",
             "identifier": "com.14ninstudio.asakurawikinotices",
             "targets": "all",
             "icon": [

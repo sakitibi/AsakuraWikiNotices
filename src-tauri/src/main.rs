@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Notice {

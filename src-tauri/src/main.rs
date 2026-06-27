@@ -54,8 +54,9 @@ async fn get_notices_from_supabase(accessToken: String) -> Result<Vec<Notice>, S
         .map_err(|e| format!("通信エラー: {}", e))?;
 
     if !res.status().is_success() {
+        let status_code = res.status();
         let err_text = res.text().await.unwrap_or_default();
-        return Err(format!("Supabaseエラー ({}): {}", res.status(), err_text));
+        return Err(format!("Supabaseエラー ({}): {}", status_code, err_text));
     }
 
     let notices = res

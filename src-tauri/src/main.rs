@@ -41,6 +41,7 @@ fn log_info(msg: &str) {
     let _ = io::stdout().flush();
 }
 
+// 💡 改行コード(\r, \n)、クォーテーション、空白、末尾のスラッシュを確実に完全に除去する強化版
 fn get_env_var(env_content: &str, key: &str) -> Option<String> {
     for line in env_content.lines() {
         let line = line.trim();
@@ -49,11 +50,78 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
         }
         if let Some((k, v)) = line.split_once('=') {
             if k.trim() == key {
-                return Some(v.trim().trim_matches(|c| c == '"' || c == '\'').to_string());
+                let cleaned_val = v.trim()
+                    .trim_matches(|c| c == '"' || c == '\'' || c == '\r' || c == '\n')
+                    .trim_end_matches('/'); // 末尾のスラッシュも自動で削る
+                return Some(cleaned_val.to_string());
             }
         }
     }
     None
+}
+
+#[tauri::command]
+async fn exchange_code_for_session(
+    code: String,
+    session_state: tauri::State<'_, SupabaseSession>,
+) -> Result<UserResponse, String> {
+    log_info(&format!("[Tauri] exchange_code_for_session: コード {} の検証を開始", code));
+
+    let env_content = include_str!("../../../.env.local");
+    let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
+        .ok_or_else(|| "SUPABASE_URLがありません".to_string())?;
+    let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY")
+        .ok_or_else(|| "SUPABASE_ANON_KEYがありません".to_string())?;
+
+    let select_url = format!("{}/rest/v1/app_links?code=eq.{}&select=*", supabase_url_base, code);
+    log_info(&format!("[DEBUG_URL] 通信先URL: {}", select_url));
+
+    let mut headers = HeaderMap::new();
+    headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| format!("API KEY設定エラー: {}", e))?);
+
+    let client = reqwest::Client::new();
+    
+    let res = client.get(&select_url).headers(headers.clone()).send().await.map_err(|e| {
+        log_info(&format!("[Tauri] 致命的な通信エラー (Supabaseに届く前に失敗): {}", e));
+        format!("通信の送信自体に失敗しました: {}", e)
+    })?;
+
+    if !res.status().is_success() {
+        let status_code = res.status();
+        let err_text = res.text().await.unwrap_or_default();
+        log_info(&format!("[Tauri] Supabase応答エラー ({}) - {}", status_code, err_text));
+        return Err(format!("Supabaseがエラーを返しました ({}): {}", status_code, err_text));
+    }
+
+    let rows = res.json::<Vec<AppLinkRow>>().await.map_err(|e| format!("パースエラー: {}", e))?;
+
+    if rows.is_empty() {
+        log_info("[Tauri] コードが一致しない、または30秒以上経過しています。");
+        return Err("認証コードが正しくないか、有効期限が切れています。".to_string());
+    }
+
+    let target_row = &rows[0];
+
+    *session_state.access_token.lock().unwrap() = Some(target_row.access_token.clone());
+    *session_state.refresh_token.lock().unwrap() = Some(target_row.refresh_token.clone());
+
+    let delete_url = format!("{}/rest/v1/app_links?code=eq.{}", supabase_url_base, code);
+    let _ = client.delete(&delete_url).headers(headers.clone()).send().await;
+
+    drop(headers);
+    let mut auth_headers = HeaderMap::new();
+    auth_headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
+    auth_headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", target_row.access_token)).map_err(|e| e.to_string())?);
+
+    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
+    let auth_res = client.get(&auth_url).headers(auth_headers).send().await.map_err(|e| format!("ユーザー検証通信失敗: {}", e))?;
+
+    if !auth_res.status().is_success() {
+        return Err("取得したセッションが無効です。".to_string());
+    }
+
+    let user_data = auth_res.json::<UserResponse>().await.map_err(|e| e.to_string())?;
+    Ok(user_data)
 }
 
 #[tauri::command]

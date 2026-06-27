@@ -41,7 +41,6 @@ fn log_info(msg: &str) {
     let _ = io::stdout().flush();
 }
 
-// 💡 改行コード(\r, \n)、クォーテーション、空白、末尾のスラッシュを確実に完全に除去する強化版
 fn get_env_var(env_content: &str, key: &str) -> Option<String> {
     for line in env_content.lines() {
         let line = line.trim();
@@ -121,6 +120,7 @@ async fn exchange_code_for_session(
     }
 
     let user_data = auth_res.json::<UserResponse>().await.map_err(|e| e.to_string())?;
+    log_info(&format!("[Tauri] exchange_code_for_session: 認証成功 (Email: {:?})", user_data.email));
     Ok(user_data)
 }
 
@@ -184,73 +184,6 @@ async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession
     })?;
 
     log_info(&format!("[Tauri] verify_supabase_session: 認証成功 (Email: {:?})", user_data.email));
-    Ok(user_data)
-}
-
-#[tauri::command]
-async fn exchange_code_for_session(
-    code: String,
-    session_state: tauri::State<'_, SupabaseSession>,
-) -> Result<UserResponse, String> {
-    log_info(&format!("[Tauri] exchange_code_for_session: コード {} の検証を開始", code));
-
-    let env_content = include_str!("../../../.env.local");
-    let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
-        .ok_or_else(|| "SUPABASE_URLがありません".to_string())?;
-    let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY")
-        .ok_or_else(|| "SUPABASE_ANON_KEYがありません".to_string())?;
-
-    // pg_cronのタイムラグをカバーするため、作成から30秒以内のデータのみを照合
-    let select_url = format!(
-        "{}/rest/v1/app_links?code=eq.{}&created_at=gt.now()-interval '30 seconds'&select=*", 
-        supabase_url_base, code
-    );
-
-    let mut headers = HeaderMap::new();
-    headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-
-    let client = reqwest::Client::new();
-    let res = client.get(&select_url).headers(headers.clone()).send().await.map_err(|e| e.to_string())?;
-
-    if !res.status().is_success() {
-        log_info(&format!("[Tauri] exchange_code_for_session: Supabaseエラー - ステータス {}", res.status()));
-        return Err("Supabaseとの通信に失敗しました。".to_string());
-    }
-
-    let rows = res.json::<Vec<AppLinkRow>>().await.map_err(|e| format!("パースエラー: {}", e))?;
-
-    if rows.is_empty() {
-        log_info("[Tauri] exchange_code_for_session: コードが一致しない、または30秒以上経過しています。");
-        return Err("認証コードが正しくないか、有効期限（30秒）が切れています。".to_string());
-    }
-
-    let target_row = &rows[0];
-
-    // メモリ上の状態管理にトークンをセット
-    *session_state.access_token.lock().unwrap() = Some(target_row.access_token.clone());
-    *session_state.refresh_token.lock().unwrap() = Some(target_row.refresh_token.clone());
-
-    // 使用済みのコードをテーブルから即時削除（使い回し防止）
-    let delete_url = format!("{}/rest/v1/app_links?code=eq.{}", supabase_url_base, code);
-    let _ = client.delete(&delete_url).headers(headers.clone()).send().await;
-
-    // 取得したトークンでユーザー情報を検証
-    drop(headers);
-    let mut auth_headers = HeaderMap::new();
-    auth_headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-    auth_headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", target_row.access_token)).map_err(|e| e.to_string())?);
-
-    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
-    let auth_res = client.get(&auth_url).headers(auth_headers).send().await.map_err(|e| e.to_string())?;
-
-    if !auth_res.status().is_success() {
-        log_info("[Tauri] exchange_code_for_session: トークン検証失敗");
-        return Err("取得したセッションが無効です。".to_string());
-    }
-
-    let user_data = auth_res.json::<UserResponse>().await.map_err(|e| e.to_string())?;
-    log_info(&format!("[Tauri] exchange_code_for_session: 認証成功 (Email: {:?})", user_data.email));
-
     Ok(user_data)
 }
 

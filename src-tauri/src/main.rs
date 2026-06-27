@@ -159,7 +159,8 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
             format!("パースエラー: {}", e)
         })?;
 
-    println!("[Tauri] get_notices_from_supabase: 取得成功 (件数: {})", notices.length());
+    // 💡 .length() から .len() へ修正
+    println!("[Tauri] get_notices_from_supabase: 取得成功 (件数: {})", notices.len());
     Ok(notices)
 }
 

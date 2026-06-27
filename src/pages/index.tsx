@@ -15,38 +15,60 @@ interface Session {
     refreshToken: string;
 }
 
-export default function Home() {
-    const [notices, setNotices] = useState<Notice[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [loginInfo, setLoginInfo] = useState<Session | null>(null);
+interface SupabaseUser {
+    id: string;
+    email?: string;
+    user_metadata?: any;
+}
 
-    const fetchNotices = async (token: string) => {
+function useSession() {
+    const [session, setSession] = useState<Session | null>(null);
+    const [user, setUser] = useState<SupabaseUser | null>(null);
+    const [status, setStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+    const [error, setError] = useState<string | null>(null);
+
+    const validateSession = async (token: string, rToken: string): Promise<boolean> => {
         try {
-            setLoading(true);
-            setError(null);
+            await invoke('set_supabase_session', { accessToken: token, refreshToken: rToken });
             
-            const data = await invoke<Notice[]>('get_notices_from_supabase', {
-                accessToken: token
-            });
-            setNotices(data);
+            const userData = await invoke<SupabaseUser>('verify_supabase_session');
+            
+            setUser(userData); // ユーザー情報を保存
+            setSession({ accessToken: token, refreshToken: rToken });
+            setStatus('authenticated');
+            setError(null);
+            return true;
         } catch (err) {
-            console.error('データ取得失敗:', err);
-            setError(typeof err === 'string' ? err : 'お知らせの取得に失敗しました。');
-        } finally {
-            setLoading(false);
+            console.error(err);
+            await invoke('clear_supabase_session').catch(() => {});
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            setSession(null);
+            setUser(null);
+            setStatus('unauthenticated');
+            setError('セッションの有効期限が切れています。再度ログインしてください。');
+            return false;
         }
     };
+
+    useEffect(() => {
+        const savedAccess = localStorage.getItem('access_token');
+        const savedRefresh = localStorage.getItem('refresh_token');
+
+        if (savedAccess && savedRefresh) {
+            validateSession(savedAccess, savedRefresh);
+        } else {
+            setStatus('unauthenticated');
+        }
+    }, []);
 
     useEffect(() => {
         let unlisten: (() => void) | null = null;
 
         const setupDeepLink = async () => {
             try {
-                unlisten = await listen<string>('deep-link-login', (event) => {
+                unlisten = await listen<string>('deep-link-login', async (event) => {
                     const urlStr = event.payload;
-                    console.log('ディープリンクURLを受信しました:', urlStr);
-
                     try {
                         const searchParamsStr = urlStr.split('?')[1];
                         if (searchParamsStr) {
@@ -55,31 +77,66 @@ export default function Home() {
                             const refreshToken = params.get('refresh_token');
 
                             if (accessToken && refreshToken) {
-                                setLoginInfo({ accessToken, refreshToken });
-                                alert('ログインに成功しました！お知らせを取得します。');
+                                setStatus('loading');
+                                const isValid = await validateSession(accessToken, refreshToken);
+                                if (isValid) {
+                                    localStorage.setItem('access_token', accessToken);
+                                    localStorage.setItem('refresh_token', refreshToken);
+                                }
                             }
                         }
                     } catch (parseErr) {
-                        console.error('URLの解析に失敗しました:', parseErr);
+                        console.error(parseErr);
                     }
                 });
             } catch (err) {
-                console.error('Tauri Event の初期化失敗:', err);
+                console.error(err);
             }
         };
 
         setupDeepLink();
-
-        return () => {
-            if (unlisten) unlisten();
-        };
+        return () => { if (unlisten) unlisten(); };
     }, []);
 
-    useEffect(() => {
-        if (loginInfo) {
-            fetchNotices(loginInfo.accessToken);
+    const logout = async () => {
+        await invoke('clear_supabase_session').catch(() => {});
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setSession(null);
+        setUser(null);
+        setStatus('unauthenticated');
+        setError(null);
+    };
+
+    return { session, user, status, error, logout };
+}
+
+export default function Home() {
+    const { user, status, error: sessionError, logout } = useSession();
+    const [notices, setNotices] = useState<Notice[]>([]);
+    const [loadingNotices, setLoadingNotices] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const loadNotices = async () => {
+        try {
+            setLoadingNotices(true);
+            setFetchError(null);
+            const data = await invoke<Notice[]>('get_notices_from_supabase');
+            setNotices(data);
+        } catch (err) {
+            setFetchError('お知らせの取得に失敗しました。');
+        } finally {
+            setLoadingNotices(false);
         }
-    }, [loginInfo]);
+    };
+
+    useEffect(() => {
+        if (status === 'authenticated') {
+            loadNotices();
+        } else {
+            setNotices([]);
+        }
+    }, [status]);
 
     return (
         <>
@@ -88,39 +145,45 @@ export default function Home() {
                 <link rel="stylesheet" href="https://sakitibi.github.io/static.asakurawiki.com/css/noticeapps/index.static.css" />
             </Head>
             <div className="container">
-                <header className="header">
+                <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h1>お知らせ一覧</h1>
+                    {status === 'authenticated' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '0.9rem', color: '#4b5563' }}>👤 {user?.email}</span>
+                            <button onClick={logout} style={{ padding: '0.5rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                ログアウト
+                            </button>
+                        </div>
+                    )}
                 </header>
 
-                {!loginInfo ? (
+                {status === 'loading' && (
+                    <div className="centerMessage">
+                        <div className="spinner"></div>
+                        <p>セッションを検証中...</p>
+                    </div>
+                )}
+
+                {status === 'unauthenticated' && (
                     <div className="centerMessage" style={{ padding: '2rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
                         <h2>ログインが必要です</h2>
                         <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                            このアプリを利用するには、ブラウザからログインしてください。
+                            このアプリを利用するには、ログインしてください。
                         </p>
+                        {sessionError && <p style={{ color: '#ef4444', marginTop: '1rem' }}>{sessionError}</p>}
                     </div>
-                ) : (
-                    <>
-                        <div style={{
-                            background: '#10b981',
-                            color: 'white',
-                            padding: '1rem',
-                            borderRadius: '8px',
-                            marginBottom: '1.5rem',
-                            wordBreak: 'break-all'
-                        }}>
-                            <h3>🔒 認証セッション有効</h3>
-                            <p><strong>Access Token:</strong> {loginInfo.accessToken.substring(0, 15)}...</p>
-                        </div>
+                )}
 
-                        {loading ? (
+                {status === 'authenticated' && (
+                    <>
+                        {loadingNotices ? (
                             <div className="centerMessage">
                                 <div className="spinner"></div>
                                 <p>情報を読み込み中...</p>
                             </div>
-                        ) : error ? (
-                            <p className="centerMessage" style={{ color: '#ef4444' }}>{error}</p>
+                        ) : fetchError ? (
+                            <p className="centerMessage" style={{ color: '#ef4444' }}>{fetchError}</p>
                         ) : notices.length === 0 ? (
                             <p className="centerMessage">現在、新しいお知らせはありません。</p>
                         ) : (

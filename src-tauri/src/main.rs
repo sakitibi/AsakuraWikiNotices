@@ -3,8 +3,14 @@
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue};
 use tauri::Manager;
+use std::sync::Mutex;
 
 const DEEP_LINK_EVENT: &str = "deep-link-login";
+
+struct SupabaseSession {
+    access_token: Mutex<Option<String>>,
+    refresh_token: Mutex<Option<String>>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Notice {
@@ -12,6 +18,14 @@ struct Notice {
     title: String,
     content: String,
     created_at: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct UserResponse {
+    id: String,
+    email: Option<String>,
+    // メタデータ（ユーザー名などが入る場所）
+    user_metadata: Option<serde_json::Value>,
 }
 
 fn get_env_var(env_content: &str, key: &str) -> Option<String> {
@@ -30,7 +44,54 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
 }
 
 #[tauri::command]
-async fn get_notices_from_supabase(accessToken: String) -> Result<Vec<Notice>, String> {
+async fn set_supabase_session(
+    accessToken: String,
+    refreshToken: String,
+    session_state: tauri::State<'_, SupabaseSession>,
+) -> Result<(), String> {
+    *session_state.access_token.lock().unwrap() = Some(accessToken);
+    *session_state.refresh_token.lock().unwrap() = Some(refreshToken);
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_supabase_session(session_state: tauri::State<'_, SupabaseSession>) -> Result<(), String> {
+    *session_state.access_token.lock().unwrap() = None;
+    *session_state.refresh_token.lock().unwrap() = None;
+    Ok(())
+}
+
+#[tauri::command]
+async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession>) -> Result<UserResponse, String> {
+    let token_guard = session_state.access_token.lock().unwrap();
+    let access_token = token_guard.as_ref().ok_or_else(|| "セッションがありません".to_string())?;
+
+    let env_content = include_str!("../../../.env.local");
+    let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
+        .ok_or_else(|| "SUPABASE_URLがありません".to_string())?;
+    let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY")
+        .ok_or_else(|| "SUPABASE_ANON_KEYがありません".to_string())?;
+
+    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
+
+    let mut headers = HeaderMap::new();
+    headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
+    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", access_token)).map_err(|e| e.to_string())?);
+
+    let client = reqwest::Client::new();
+    let res = client.get(&auth_url).headers(headers).send().await.map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err("無効なセッションです".to_string());
+    }
+
+    // ユーザー情報をJSON構造体にパース
+    let user_data = res.json::<UserResponse>().await.map_err(|e| format!("ユーザー情報の解析失敗: {}", e))?;
+    Ok(user_data)
+}
+
+#[tauri::command]
+async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSession>) -> Result<Vec<Notice>, String> {
     let env_content = include_str!("../../../.env.local");
 
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
@@ -43,7 +104,11 @@ async fn get_notices_from_supabase(accessToken: String) -> Result<Vec<Notice>, S
 
     let mut headers = HeaderMap::new();
     headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", accessToken)).map_err(|e| e.to_string())?);
+
+    let token_guard = session_state.access_token.lock().unwrap();
+    if let Some(access_token) = token_guard.as_ref() {
+        headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", access_token)).map_err(|e| e.to_string())?);
+    }
 
     let client = reqwest::Client::new();
     let res = client
@@ -69,6 +134,10 @@ async fn get_notices_from_supabase(accessToken: String) -> Result<Vec<Notice>, S
 
 fn main() {
     tauri::Builder::default()
+        .manage(SupabaseSession {
+            access_token: Mutex::new(None),
+            refresh_token: Mutex::new(None),
+        })
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             for arg in args {
                 if arg.starts_with("asakurawiki://") {
@@ -89,7 +158,12 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_notices_from_supabase])
+        .invoke_handler(tauri::generate_handler![
+            get_notices_from_supabase,
+            set_supabase_session,
+            clear_supabase_session,
+            verify_supabase_session
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -26,6 +26,12 @@
                 "icons/icon.ico"
             ] 
         },
+        "deepLink": {
+            "schemes": [
+                "asakurawiki"
+            ],
+            "failOnError": true
+        },
         "windows": [
             {
                 "fullscreen": false,

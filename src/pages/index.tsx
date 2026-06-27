@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import styles from '../styles/home.module.css';
 import { invoke } from '@tauri-apps/api/tauri';
 
 interface Notice {
@@ -34,28 +33,28 @@ export default function Home() {
     }, []);
 
     return (
-        <div className={styles.container}>
-            <header className={styles.header}>
+        <div className="container">
+            <header className="header">
                 <h1>📢 お知らせ一覧</h1>
-                <p className={styles.subtitle}>バックエンド（Rust）経由でSupabaseから安全に取得しています</p>
+                <p className="subtitle">バックエンド（Rust）経由でSupabaseから安全に取得しています</p>
             </header>
 
             {loading ? (
-                <div className={styles.centerMessage}>
-                    <div className={styles.spinner}></div>
+                <div className="centerMessage">
+                    <div className="spinner"></div>
                     <p>情報を読み込み中...</p>
                 </div>
             ) : error ? (
-                <p className={styles.centerMessage} style={{ color: '#ef4444' }}>{error}</p>
+                <p className="centerMessage" style={{ color: '#ef4444' }}>{error}</p>
             ) : notices.length === 0 ? (
-                <p className={styles.centerMessage}>現在、新しいお知らせはありません。</p>
+                <p className="centerMessage">現在、新しいお知らせはありません。</p>
             ) : (
-                <div className={styles.noticeList}>
+                <div className="noticeList">
                     {notices.map((notice) => (
-                        <article key={notice.id} className={styles.noticeCard}>
-                            <div className={styles.cardMeta}>
-                                <span className={styles.badge}>NEW</span>
-                                <time className={styles.date}>
+                        <article key={notice.id} className="noticeCard">
+                            <div className="cardMeta">
+                                <span className="badge">NEW</span>
+                                <time className="date">
                                     {new Date(notice.created_at).toLocaleDateString('ja-JP', {
                                         year: 'numeric',
                                         month: '2-digit',
@@ -63,8 +62,8 @@ export default function Home() {
                                     })}
                                 </time>
                             </div>
-                            <h2 className={styles.cardTitle}>{notice.title}</h2>
-                            <p className={styles.cardContent}>{notice.content}</p>
+                            <h2 className="cardTitle">{notice.title}</h2>
+                            <p className="cardContent">{notice.content}</p>
                         </article>
                     ))}
                 </div>

@@ -1,0 +1,6 @@
+.env.local
+.vscode
+._*
+.DS_Store
+pnpm-lock.yaml
+node_modules

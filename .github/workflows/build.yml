@@ -1,0 +1,60 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*' # v0.1.0 などのタグがプッシュされたら起動
+
+jobs:
+  release:
+    permissions:
+      contents: write # GitHub Releaseに書き込むために必要
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create .env.local for Rust build
+        shell: bash
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env.local
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env.local
+
+      # 1. Node.js のセットアップ
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 2. Rust のセットアップ
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # 3. Linux (Ubuntu) の場合のみ必要なシステム依存関係のインストール
+      - name: install webkit2gtk (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      # 4. フロントエンドの依存関係をインストール
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # 5. Tauri アプリのビルド & GitHub Release へのアップロード
+      - name: Build and Release Tauri App
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Notice App ${{ github.ref_name }}'
+          releaseBody: 'Automated release by GitHub Actions'
+          releaseDraft: true # 最初は下書き(Draft)として作成されるので安心です
+          prerelease: false

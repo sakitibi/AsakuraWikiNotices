@@ -1,0 +1,33 @@
+{
+    "build": {
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build",
+        "devPath": "http://localhost:3000",
+        "distDir": "../out"
+    },
+    "package": {
+        "productName": "asakurawikinotices",
+        "version": "1.0.0"
+    },
+    "tauri": {
+        "allowlist": {
+            "all": true
+        },
+        "bundle": {
+            "active": true,
+            "category": "AsakuraWikiNotices",
+            "identifier": "com.14ninstudio.asakurawikinotices",
+            "icon": [], 
+            "targets": "all" 
+        },
+        "windows": [
+            {
+                "fullscreen": false,
+                "height": 600,
+                "resizable": true,
+                "title": "Notice App",
+                "width": 800
+            }
+        ]
+    }
+}

@@ -30,10 +30,9 @@ function useSession() {
     const validateSession = async (token: string, rToken: string): Promise<boolean> => {
         try {
             await invoke('set_supabase_session', { accessToken: token, refreshToken: rToken });
-            
             const userData = await invoke<SupabaseUser>('verify_supabase_session');
             
-            setUser(userData); // ユーザー情報を保存
+            setUser(userData);
             setSession({ accessToken: token, refreshToken: rToken });
             setStatus('authenticated');
             setError(null);
@@ -48,6 +47,23 @@ function useSession() {
             setStatus('unauthenticated');
             setError('セッションの有効期限が切れています。再度ログインしてください。');
             return false;
+        }
+    };
+
+    const loginWithCode = async (code: string) => {
+        setStatus('loading');
+        setError(null);
+        try {
+            // Rust側の exchange_code_for_session コマンドを呼び出し
+            const userData = await invoke<SupabaseUser>('exchange_code_for_session', { code });
+
+            setUser(userData);
+            setStatus('authenticated');
+            
+        } catch (err: any) {
+            console.error(err);
+            setStatus('unauthenticated');
+            setError(err.toString() || '認証コードが正しくないか、有効期限が切れています。');
         }
     };
 
@@ -108,14 +124,17 @@ function useSession() {
         setError(null);
     };
 
-    return { session, user, status, error, logout };
+    return { session, user, status, error, logout, loginWithCode };
 }
 
 export default function Home() {
-    const { user, status, error: sessionError, logout } = useSession();
+    const { user, status, error: sessionError, logout, loginWithCode } = useSession();
     const [notices, setNotices] = useState<Notice[]>([]);
     const [loadingNotices, setLoadingNotices] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    
+    // 💡 入力されたピンコードを管理するステート
+    const [pinCode, setPinCode] = useState('');
 
     const loadNotices = async () => {
         try {
@@ -137,6 +156,14 @@ export default function Home() {
             setNotices([]);
         }
     }, [status]);
+
+    // 💡 フォーム送信時のハンドラ
+    const handleCodeSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (pinCode.trim().length === 6) {
+            loginWithCode(pinCode.trim());
+        }
+    };
 
     return (
         <>
@@ -160,7 +187,7 @@ export default function Home() {
                 {status === 'loading' && (
                     <div className="centerMessage">
                         <div className="spinner"></div>
-                        <p>セッションを検証中...</p>
+                        <p>セッション情報を検証中...</p>
                     </div>
                 )}
 
@@ -169,8 +196,27 @@ export default function Home() {
                         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
                         <h2>ログインが必要です</h2>
                         <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                            このアプリを利用するには、ログインしてください。
+                            ブラウザで発行された6桁の認証コードを30秒以内に入力してください。
                         </p>
+
+                        <form onSubmit={handleCodeSubmit} style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                            <input
+                                type="text"
+                                placeholder="000000"
+                                maxLength={6}
+                                value={pinCode}
+                                onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))} // 数字以外を除外
+                                style={{ padding: '0.5rem', fontSize: '1.2rem', letterSpacing: '0.2rem', textAlign: 'center', width: '140px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={pinCode.length !== 6} 
+                                style={{ padding: '0.5rem 1.2rem', background: pinCode.length === 6 ? '#2563eb' : '#9ca3af', color: 'white', border: 'none', borderRadius: '4px', cursor: pinCode.length === 6 ? 'pointer' : 'default', fontWeight: 'bold' }}
+                            >
+                                認証
+                            </button>
+                        </form>
+
                         {sessionError && <p style={{ color: '#ef4444', marginTop: '1rem' }}>{sessionError}</p>}
                     </div>
                 )}

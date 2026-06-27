@@ -158,7 +158,7 @@ export default function Home() {
 
     const handleCodeSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (pinCode.trim().length === 6) {
+        if (pinCode.trim().length === 8) {
             loginWithCode(pinCode.trim());
         }
     };
@@ -200,9 +200,8 @@ export default function Home() {
                         <form onSubmit={handleCodeSubmit} style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                             <input
                                 type="text"
-                                placeholder="Ab12Xy"
+                                placeholder="Ab123Xyz"
                                 maxLength={8}
-                                minLength={8}
                                 value={pinCode}
                                 onChange={(e) => setPinCode(e.target.value.replace(/[^0-9a-zA-Z]/g, ''))}
                                 style={{ 
@@ -262,7 +261,7 @@ export default function Home() {
                                             </time>
                                         </div>
                                         <h2 className="cardTitle">{notice.title}</h2>
-                                        <p className="cardContent">{notice.content}</p>
+                                        <p className="cardContent" dangerouslySetInnerHTML={{__html: notice.content}}></p>
                                     </article>
                                 ))}
                             </div>

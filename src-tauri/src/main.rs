@@ -2,10 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue};
-// ディープリンクに必要なマネージャーとイベント送信機能をインポート
 use tauri::Manager;
 
-// フロントエンドへディープリンクの通知を届けるためのイベント名
 const DEEP_LINK_EVENT: &str = "deep-link-login";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,7 +22,6 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
         }
         if let Some((k, v)) = line.split_once('=') {
             if k.trim() == key {
-                // クォーテーション（" や '）がついている場合は除去する
                 return Some(v.trim().trim_matches(|c| c == '"' || c == '\'').to_string());
             }
         }
@@ -34,7 +31,6 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
 
 #[tauri::command]
 async fn get_notices_from_supabase() -> Result<Vec<Notice>, String> {
-    // コンパイル時に .env.local を埋め込み
     let env_content = include_str!("../../../.env.local");
 
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
@@ -67,22 +63,18 @@ async fn get_notices_from_supabase() -> Result<Vec<Notice>, String> {
 
 fn main() {
     tauri::Builder::default()
-        // 1. すでにアプリが起動している状態で、新しくURLが叩かれたときの処理（二重起動の防止）
-        .plugin(tauri-plugin-single-instance::init(|app, args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             for arg in args {
                 if arg.starts_with("asakurawiki://") {
-                    // すでに開いているフロントエンド画面（全てのウィンドウ）にURLを通知
                     let _ = app.emit_all(DEEP_LINK_EVENT, arg);
                 }
             }
         }))
-        // 2. アプリが完全に閉じている状態から、URLを叩いて「新規起動」したときの処理
         .setup(|app| {
             let args: Vec<String> = std::env::args().collect();
             for arg in args {
                 if arg.starts_with("asakurawiki://") {
                     let app_handle = app.handle();
-                    // フロントエンド（Next.js）のロードが完了するまで1秒待ってからイベントを送信
                     tauri::async_runtime::spawn(async move {
                         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
                         let _ = app_handle.emit_all(DEEP_LINK_EVENT, arg);
@@ -91,7 +83,6 @@ fn main() {
             }
             Ok(())
         })
-        // 3. 既存の Supabase からのお知らせ取得コマンドも忘れずに登録
         .invoke_handler(tauri::generate_handler![get_notices_from_supabase])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

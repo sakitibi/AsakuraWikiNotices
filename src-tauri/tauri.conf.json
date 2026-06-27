@@ -25,16 +25,6 @@
                 "icons/icon.icns",
                 "icons/icon.ico"
             ],
-            "macOS": {
-                "urlAssociations": [
-                    {
-                        "role": "Viewer",
-                        "schemes": [
-                            "asakurawiki"
-                        ]
-                    }
-                ]
-            },
             "windows": {
                 "wix": {
                     "language": "ja-JP"

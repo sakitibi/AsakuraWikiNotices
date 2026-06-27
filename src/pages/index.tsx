@@ -133,7 +133,6 @@ export default function Home() {
     const [loadingNotices, setLoadingNotices] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     
-    // 💡 入力されたピンコードを管理するステート
     const [pinCode, setPinCode] = useState('');
 
     const loadNotices = async () => {
@@ -157,7 +156,6 @@ export default function Home() {
         }
     }, [status]);
 
-    // 💡 フォーム送信時のハンドラ
     const handleCodeSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (pinCode.trim().length === 6) {
@@ -202,18 +200,27 @@ export default function Home() {
                         <form onSubmit={handleCodeSubmit} style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                             <input
                                 type="text"
-                                placeholder="000000"
+                                placeholder="Ab12Xy"
                                 maxLength={6}
                                 value={pinCode}
-                                onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))} // 数字以外を除外
-                                style={{ padding: '0.5rem', fontSize: '1.2rem', letterSpacing: '0.2rem', textAlign: 'center', width: '140px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                                onChange={(e) => setPinCode(e.target.value.replace(/[^0-9a-zA-Z]/g, ''))}
+                                style={{ 
+                                    padding: '0.5rem', 
+                                    fontSize: '1.2rem', 
+                                    letterSpacing: '0.2rem', 
+                                    textAlign: 'center', 
+                                    width: '160px',
+                                    border: '1px solid #d1d5db', 
+                                    borderRadius: '4px',
+                                    fontFamily: 'monospace'
+                                }}
                             />
                             <button 
                                 type="submit" 
                                 disabled={pinCode.length !== 6} 
                                 style={{ padding: '0.5rem 1.2rem', background: pinCode.length === 6 ? '#2563eb' : '#9ca3af', color: 'white', border: 'none', borderRadius: '4px', cursor: pinCode.length === 6 ? 'pointer' : 'default', fontWeight: 'bold' }}
                             >
-                                認証
+                                <span>認証</span>
                             </button>
                         </form>
 

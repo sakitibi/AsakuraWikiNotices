@@ -3,6 +3,7 @@ import type { AppProps } from 'next/app';
 export default function App({ Component, pageProps }: AppProps) {
     return (
         <>
+            <link rel="stylesheet" href="https://sakitibi.github.io/static.asakurawiki.com/css/index.globals.css" />
             <style jsx global>{`
                 body {
                     margin: 0;

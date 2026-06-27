@@ -58,13 +58,13 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
 
 #[tauri::command]
 async fn set_supabase_session(
-    accessToken: String,
-    refreshToken: String,
+    access_token: String,
+    refresh_token: String,
     session_state: tauri::State<'_, SupabaseSession>,
 ) -> Result<(), String> {
     log_info("[Tauri] set_supabase_session: セッションを設定します。");
-    *session_state.access_token.lock().unwrap() = Some(accessToken);
-    *session_state.refresh_token.lock().unwrap() = Some(refreshToken);
+    *session_state.access_token.lock().unwrap() = Some(access_token);
+    *session_state.refresh_token.lock().unwrap() = Some(refresh_token);
     Ok(())
 }
 

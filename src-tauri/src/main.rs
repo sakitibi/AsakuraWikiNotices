@@ -15,6 +15,28 @@ fn log_info(msg: &str) {
     let _ = io::stdout().flush();
 }
 
+async fn get_user_info(
+    client: &reqwest::Client,
+    supabase_url_base: &str,
+    supabase_anon_key: &str,
+    token: &str,
+) -> Result<UserResponse, String> {
+    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
+    
+    let mut auth_headers = HeaderMap::new();
+    auth_headers.insert("apikey", HeaderValue::from_str(supabase_anon_key).map_err(|e| e.to_string())?);
+    auth_headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", token)).map_err(|e| e.to_string())?);
+
+    let auth_res = client.get(&auth_url).headers(auth_headers).send().await.map_err(|e| e.to_string())?;
+
+    if !auth_res.status().is_success() {
+        return Err("ユーザー情報の取得、またはセッションの検証に失敗しました。".to_string());
+    }
+
+    let user_data = auth_res.json::<UserResponse>().await.map_err(|e| format!("解析失敗: {}", e))?;
+    Ok(user_data)
+}
+
 #[tauri::command]
 async fn exchange_code_for_session(
     code: String,
@@ -26,7 +48,7 @@ async fn exchange_code_for_session(
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL").ok_or("SUPABASE_URLがありません")?;
     let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY").ok_or("SUPABASE_ANON_KEYがありません")?;
 
-    let select_url = format!("{}/rest/v1/app_links?code=eq.{}&select=*", supabase_url_base, code);
+    let select_url = format!("{}/rest/v1/app_links?code=eq.{}&app_name=eq.notices&select=*", supabase_url_base, code);
     log_info(&format!("[DEBUG_URL] 通信先URL: {}", select_url));
 
     let mut headers = HeaderMap::new();
@@ -51,19 +73,7 @@ async fn exchange_code_for_session(
     let delete_url = format!("{}/rest/v1/app_links?code=eq.{}", supabase_url_base, code);
     let _ = client.delete(&delete_url).headers(headers.clone()).send().await;
 
-    drop(headers);
-    let mut auth_headers = HeaderMap::new();
-    auth_headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-    auth_headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", target_row.access_token)).map_err(|e| e.to_string())?);
-
-    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
-    let auth_res = client.get(&auth_url).headers(auth_headers).send().await.map_err(|e| e.to_string())?;
-
-    if !auth_res.status().is_success() {
-        return Err("取得したセッションが無効です。".to_string());
-    }
-
-    let user_data = auth_res.json::<UserResponse>().await.map_err(|e| e.to_string())?;
+    let user_data = get_user_info(&client, &supabase_url_base, &supabase_anon_key, &target_row.access_token).await?;
     let _ = save_session_to_file(&target_row.access_token, &target_row.refresh_token, &user_data);
 
     Ok(user_data)
@@ -110,22 +120,18 @@ async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL").ok_or("SUPABASE_URLがありません")?;
     let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY").ok_or("SUPABASE_ANON_KEYがありません")?;
 
-    let auth_url = format!("{}/auth/v1/user", supabase_url_base);
-    let mut headers = HeaderMap::new();
-    headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", token)).map_err(|e| e.to_string())?);
-
     let client = reqwest::Client::new();
-    let res = client.get(&auth_url).headers(headers).send().await.map_err(|e| e.to_string())?;
-
-    if !res.status().is_success() {
-        delete_token_file();
-        return Err("無効なセッションです".to_string());
+    
+    match get_user_info(&client, &supabase_url_base, &supabase_anon_key, &token).await {
+        Ok(user_data) => {
+            log_info(&format!("[Tauri] verify_supabase_session: 認証成功 (Email: {:?})", user_data.email));
+            Ok(user_data)
+        }
+        Err(e) => {
+            delete_token_file();
+            Err(e)
+        }
     }
-
-    let user_data = res.json::<UserResponse>().await.map_err(|e| format!("解析失敗: {}", e))?;
-    log_info(&format!("[Tauri] verify_supabase_session: 認証成功 (Email: {:?})", user_data.email));
-    Ok(user_data)
 }
 
 #[tauri::command]
@@ -134,15 +140,22 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL").ok_or("SUPABASE_URLがありません")?;
     let supabase_anon_key = get_env_var(env_content, "SUPABASE_ANON_KEY").ok_or("SUPABASE_ANON_KEYがありません")?;
 
-    let supabase_url = format!("{}/rest/v1/notices?select=*&order=created_at.desc", supabase_url_base);
+    let client = reqwest::Client::new();
     let mut headers = HeaderMap::new();
     headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
 
-    if let Some(access_token) = session_state.access_token.lock().unwrap().clone() {
-        headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", access_token)).map_err(|e| e.to_string())?);
+    let access_token = session_state.access_token.lock().unwrap().clone();
+    let mut supabase_url = format!("{}/rest/v1/notices?select=*&order=created_at.desc", supabase_url_base);
+
+    if let Some(token) = access_token {
+        if let Ok(user_data) = get_user_info(&client, &supabase_url_base, &supabase_anon_key, &token).await {
+            supabase_url.push_str(&format!("&or=(user_id.is.null,user_id.eq.{})", user_data.id));
+        }
+        headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", token)).map_err(|e| e.to_string())?);
+    } else {
+        supabase_url.push_str("&user_id=is.null");
     }
 
-    let client = reqwest::Client::new();
     let res = client.get(&supabase_url).headers(headers).send().await.map_err(|e| e.to_string())?;
     
     if !res.status().is_success() {

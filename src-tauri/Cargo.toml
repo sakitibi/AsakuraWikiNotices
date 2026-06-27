@@ -1,6 +1,6 @@
 [package]
 name = "asakurawikinotices"
-version = "1.0.3"
+version = "1.0.4"
 description = "AsakuraWikiNotices"
 authors = ["sakitibi"]
 edition = "2021"

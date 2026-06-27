@@ -24,25 +24,29 @@
                 "icons/128x128@2x.png",
                 "icons/icon.icns",
                 "icons/icon.ico"
-            ] 
-        },
-        "macOS": {
-            "urlAssociations": [
-                {
-                    "role": "Viewer",
-                    "schemes": ["asakurawiki"]
+            ],
+            "macos": {
+                "urlAssociations": [
+                    {
+                        "role": "Viewer",
+                        "schemes": ["asakurawiki"]
+                    }
+                ]
+            },
+            "windows": {
+                "wix": {
+                    "language": "ja-JP"
                 }
-            ]
-        },
-        "windows": {
-            "fullscreen": false,
-            "height": 600,
-            "resizable": true,
-            "title": "AsakuraWiki",
-            "width": 800,
-            "wix": {
-                "language": "ja-JP"
             }
-        }
+        },
+        "windows": [
+            {
+                "fullscreen": false,
+                "height": 600,
+                "resizable": true,
+                "title": "AsakuraWiki",
+                "width": 800
+            }
+        ]
     }
 }

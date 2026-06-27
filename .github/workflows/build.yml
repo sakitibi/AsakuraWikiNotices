@@ -30,7 +30,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       # 2. Rust のセットアップ
       - name: Setup Rust toolchain
@@ -45,7 +44,7 @@ jobs:
 
       # 4. フロントエンドの依存関係をインストール
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install
 
       # 5. Tauri アプリのビルド & GitHub Release へのアップロード
       - name: Build and Release Tauri App

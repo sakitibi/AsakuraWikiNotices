@@ -6,7 +6,6 @@ mod auth;
 use models::{SupabaseSession, UserResponse, AppLinkRow, Notice};
 use auth::{get_env_var, save_session_to_file, load_session_from_file, delete_token_file};
 
-use serde_json;
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::sync::Mutex;
 use std::io::{self, Write};

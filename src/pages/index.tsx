@@ -92,7 +92,7 @@ export default function Home() {
         }
     }, [status]);
 
-    const handleCodeSubmit = (e: React.FormEvent) => {
+    const handleCodeSubmit = (e: React.SubmitEvent) => {
         e.preventDefault();
         if (pinCode.trim().length === 8) {
             loginWithCode(pinCode.trim());
@@ -108,6 +108,7 @@ export default function Home() {
             <div className="container">
                 <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h1>お知らせ一覧</h1>
+                    <br/>
                     {status === 'authenticated' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <span style={{ fontSize: '0.9rem', color: '#4b5563' }}>👤 {user?.email}</span>

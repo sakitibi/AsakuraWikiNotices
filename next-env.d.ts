@@ -1,5 +1,6 @@
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
 
-// NOTE: Previously, This file was internally image.d.ts
-// @see https://github.com/vercel/next.js/blob/v13.0.0/packages/next/src/client/image-types/global.d.ts
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/pages/api-reference/config/typescript for more information.

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue};
 use tauri::Manager;
 use std::sync::Mutex;
+use std::io::{self, Write};
 
 const DEEP_LINK_EVENT: &str = "deep-link-login";
 
@@ -27,6 +28,12 @@ struct UserResponse {
     user_metadata: Option<serde_json::Value>,
 }
 
+// 💡 ログを確実に即時出力するためのヘルパー関数
+fn log_info(msg: &str) {
+    println!("{}", msg);
+    let _ = io::stdout().flush();
+}
+
 fn get_env_var(env_content: &str, key: &str) -> Option<String> {
     for line in env_content.lines() {
         let line = line.trim();
@@ -48,7 +55,7 @@ async fn set_supabase_session(
     refreshToken: String,
     session_state: tauri::State<'_, SupabaseSession>,
 ) -> Result<(), String> {
-    println!("[Tauri] set_supabase_session: セッションを設定します。");
+    log_info("[Tauri] set_supabase_session: セッションを設定します。");
     *session_state.access_token.lock().unwrap() = Some(accessToken);
     *session_state.refresh_token.lock().unwrap() = Some(refreshToken);
     Ok(())
@@ -56,7 +63,7 @@ async fn set_supabase_session(
 
 #[tauri::command]
 async fn clear_supabase_session(session_state: tauri::State<'_, SupabaseSession>) -> Result<(), String> {
-    println!("[Tauri] clear_supabase_session: セッションを破棄します。");
+    log_info("[Tauri] clear_supabase_session: セッションを破棄します。");
     *session_state.access_token.lock().unwrap() = None;
     *session_state.refresh_token.lock().unwrap() = None;
     Ok(())
@@ -64,11 +71,11 @@ async fn clear_supabase_session(session_state: tauri::State<'_, SupabaseSession>
 
 #[tauri::command]
 async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession>) -> Result<UserResponse, String> {
-    println!("[Tauri] verify_supabase_session: 開始");
+    log_info("[Tauri] verify_supabase_session: 開始");
     let access_token = {
         let token_guard = session_state.access_token.lock().unwrap();
         token_guard.as_ref().ok_or_else(|| {
-            println!("[Tauri] verify_supabase_session: エラー - セッションがありません");
+            log_info("[Tauri] verify_supabase_session: エラー - セッションがありません");
             "セッションがありません".to_string()
         })?.clone()
     };
@@ -87,27 +94,27 @@ async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession
 
     let client = reqwest::Client::new();
     let res = client.get(&auth_url).headers(headers).send().await.map_err(|e| {
-        println!("[Tauri] verify_supabase_session: 通信エラー - {}", e);
+        log_info(&format!("[Tauri] verify_supabase_session: 通信エラー - {}", e));
         e.to_string()
     })?;
 
     if !res.status().is_success() {
-        println!("[Tauri] verify_supabase_session: 認証失敗 - ステータス: {}", res.status());
+        log_info(&format!("[Tauri] verify_supabase_session: 認証失敗 - ステータス: {}", res.status()));
         return Err("無効なセッションです".to_string());
     }
 
     let user_data = res.json::<UserResponse>().await.map_err(|e| {
-        println!("[Tauri] verify_supabase_session: パースエラー - {}", e);
+        log_info(&format!("[Tauri] verify_supabase_session: パースエラー - {}", e));
         format!("ユーザー情報の解析失敗: {}", e)
     })?;
 
-    println!("[Tauri] verify_supabase_session: 認証成功 (Email: {:?})", user_data.email);
+    log_info(&format!("[Tauri] verify_supabase_session: 認証成功 (Email: {:?})", user_data.email));
     Ok(user_data)
 }
 
 #[tauri::command]
 async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSession>) -> Result<Vec<Notice>, String> {
-    println!("[Tauri] get_notices_from_supabase: 開始");
+    log_info("[Tauri] get_notices_from_supabase: 開始");
     let env_content = include_str!("../../../.env.local");
 
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
@@ -127,10 +134,10 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
     };
 
     if let Some(access_token) = maybe_token {
-        println!("[Tauri] get_notices_from_supabase: 認証ヘッダーを付与します。");
+        log_info("[Tauri] get_notices_from_supabase: 認証ヘッダーを付与します。");
         headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", access_token)).map_err(|e| e.to_string())?);
     } else {
-        println!("[Tauri] get_notices_from_supabase: 未ログイン（ゲスト状態）でリクエストします。");
+        log_info("[Tauri] get_notices_from_supabase: 未ログイン（ゲスト状態）でリクエストします。");
     }
 
     let client = reqwest::Client::new();
@@ -140,14 +147,14 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
         .send()
         .await
         .map_err(|e| {
-            println!("[Tauri] get_notices_from_supabase: 通信エラー - {}", e);
+            log_info(&format!("[Tauri] get_notices_from_supabase: 通信エラー - {}", e));
             format!("通信エラー: {}", e)
         })?;
 
     if !res.status().is_success() {
         let status_code = res.status();
         let err_text = res.text().await.unwrap_or_default();
-        println!("[Tauri] get_notices_from_supabase: Supabaseエラー ({}) - {}", status_code, err_text);
+        log_info(&format!("[Tauri] get_notices_from_supabase: Supabaseエラー ({}) - {}", status_code, err_text));
         return Err(format!("Supabaseエラー ({}): {}", status_code, err_text));
     }
 
@@ -155,12 +162,11 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
         .json::<Vec<Notice>>()
         .await
         .map_err(|e| {
-            println!("[Tauri] get_notices_from_supabase: パースエラー - {}", e);
+            log_info(&format!("[Tauri] get_notices_from_supabase: パースエラー - {}", e));
             format!("パースエラー: {}", e)
         })?;
 
-    // 💡 .length() から .len() へ修正
-    println!("[Tauri] get_notices_from_supabase: 取得成功 (件数: {})", notices.len());
+    log_info(&format!("[Tauri] get_notices_from_supabase: 取得成功 (件数: {})", notices.len()));
     Ok(notices)
 }
 
@@ -173,7 +179,7 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             for arg in args {
                 if arg.starts_with("asakurawiki://") {
-                    println!("[Tauri] SingleInstance: ディープリンクイベントを発行します -> {}", arg);
+                    log_info(&format!("[Tauri] SingleInstance: ディープリンクイベントを発行します -> {}", arg));
                     let _ = app.emit_all(DEEP_LINK_EVENT, arg);
                 }
             }
@@ -182,11 +188,11 @@ fn main() {
             let args: Vec<String> = std::env::args().collect();
             for arg in args {
                 if arg.starts_with("asakurawiki://") {
-                    println!("[Tauri] Setup: 起動引数からディープリンクを検知しました -> {}", arg);
+                    log_info(&format!("[Tauri] Setup: 起動引数からディープリンクを検知しました -> {}", arg));
                     let app_handle = app.handle();
                     tauri::async_runtime::spawn(async move {
                         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                        println!("[Tauri] Setup: 1秒待機後、ディープリンクイベントを発行します。");
+                        log_info("[Tauri] Setup: 1秒待機後、ディープリンクイベントを発行します。");
                         let _ = app_handle.emit_all(DEEP_LINK_EVENT, arg);
                     });
                 }

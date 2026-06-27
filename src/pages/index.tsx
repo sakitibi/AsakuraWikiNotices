@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { listen } from '@tauri-apps/api/event';
 import Head from 'next/head';
 import NoticeView from '@/components/notice/Notice';
 
@@ -11,11 +10,6 @@ export interface Notice {
     created_at: string;
 }
 
-interface Session {
-    accessToken: string;
-    refreshToken: string;
-}
-
 interface SupabaseUser {
     id: string;
     email?: string;
@@ -23,31 +17,20 @@ interface SupabaseUser {
 }
 
 function useSession() {
-    const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<SupabaseUser | null>(null);
     const [status, setStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
     const [error, setError] = useState<string | null>(null);
 
-    const validateSession = async (token: string, rToken: string): Promise<boolean> => {
+    const checkInitialSession = async () => {
         try {
-            await invoke('set_supabase_session', { accessToken: token, refreshToken: rToken });
             const userData = await invoke<SupabaseUser>('verify_supabase_session');
-            
             setUser(userData);
-            setSession({ accessToken: token, refreshToken: rToken });
             setStatus('authenticated');
             setError(null);
-            return true;
         } catch (err) {
-            console.error(err);
-            await invoke('clear_supabase_session').catch(() => {});
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            setSession(null);
+            console.log("[Session] 保存されたセッションがないか、無効です。");
             setUser(null);
             setStatus('unauthenticated');
-            setError('セッションの有効期限が切れています。再度ログインしてください。');
-            return false;
         }
     };
 
@@ -55,12 +38,9 @@ function useSession() {
         setStatus('loading');
         setError(null);
         try {
-            // Rust側の exchange_code_for_session コマンドを呼び出し
             const userData = await invoke<SupabaseUser>('exchange_code_for_session', { code });
-
             setUser(userData);
             setStatus('authenticated');
-            
         } catch (err: any) {
             console.error(err);
             setStatus('unauthenticated');
@@ -68,64 +48,19 @@ function useSession() {
         }
     };
 
+    // 初回起動時にファイルからロード
     useEffect(() => {
-        const savedAccess = localStorage.getItem('access_token');
-        const savedRefresh = localStorage.getItem('refresh_token');
-
-        if (savedAccess && savedRefresh) {
-            validateSession(savedAccess, savedRefresh);
-        } else {
-            setStatus('unauthenticated');
-        }
-    }, []);
-
-    useEffect(() => {
-        let unlisten: (() => void) | null = null;
-
-        const setupDeepLink = async () => {
-            try {
-                unlisten = await listen<string>('deep-link-login', async (event) => {
-                    const urlStr = event.payload;
-                    try {
-                        const searchParamsStr = urlStr.split('?')[1];
-                        if (searchParamsStr) {
-                            const params = new URLSearchParams(searchParamsStr);
-                            const accessToken = params.get('access_token');
-                            const refreshToken = params.get('refresh_token');
-
-                            if (accessToken && refreshToken) {
-                                setStatus('loading');
-                                const isValid = await validateSession(accessToken, refreshToken);
-                                if (isValid) {
-                                    localStorage.setItem('access_token', accessToken);
-                                    localStorage.setItem('refresh_token', refreshToken);
-                                }
-                            }
-                        }
-                    } catch (parseErr) {
-                        console.error(parseErr);
-                    }
-                });
-            } catch (err) {
-                console.error(err);
-            }
-        };
-
-        setupDeepLink();
-        return () => { if (unlisten) unlisten(); };
+        checkInitialSession();
     }, []);
 
     const logout = async () => {
         await invoke('clear_supabase_session').catch(() => {});
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setSession(null);
         setUser(null);
         setStatus('unauthenticated');
         setError(null);
     };
 
-    return { session, user, status, error, logout, loginWithCode };
+    return { user, status, error, logout, loginWithCode };
 }
 
 export default function Home() {

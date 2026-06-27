@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
-pub const DEEP_LINK_EVENT: &str = "deep-link-login";
 pub const TOKEN_FILE_NAME: &str = ".askreditor_token.json";
 
 pub struct SupabaseSession {

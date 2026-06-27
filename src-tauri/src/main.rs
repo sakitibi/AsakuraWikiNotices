@@ -3,12 +3,11 @@
 mod models;
 mod auth;
 
-use models::{SupabaseSession, UserResponse, AppLinkRow, Notice, DEEP_LINK_EVENT};
+use models::{SupabaseSession, UserResponse, AppLinkRow, Notice};
 use auth::{get_env_var, save_session_to_file, load_session_from_file, delete_token_file};
 
 use serde_json;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tauri::Manager;
 use std::sync::Mutex;
 use std::io::{self, Write};
 
@@ -160,26 +159,6 @@ fn main() {
         .manage(SupabaseSession {
             access_token: Mutex::new(None),
             refresh_token: Mutex::new(None),
-        })
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            for arg in args {
-                if arg.starts_with("asakurawiki://") {
-                    let _ = app.emit_all(DEEP_LINK_EVENT, arg);
-                }
-            }
-        }))
-        .setup(|app| {
-            let args: Vec<String> = std::env::args().collect();
-            for arg in args {
-                if arg.starts_with("asakurawiki://") {
-                    let app_handle = app.handle();
-                    tauri::async_runtime::spawn(async move {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                        let _ = app_handle.emit_all(DEEP_LINK_EVENT, arg);
-                    });
-                }
-            }
-            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_notices_from_supabase,

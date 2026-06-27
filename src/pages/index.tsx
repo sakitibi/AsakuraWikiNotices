@@ -19,19 +19,20 @@ export default function Home() {
     const [notices, setNotices] = useState<Notice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    // ログイン状態やトークンを表示・管理するためのステート
     const [loginInfo, setLoginInfo] = useState<Session | null>(null);
 
-    const fetchNotices = async () => {
+    const fetchNotices = async (token: string) => {
         try {
             setLoading(true);
             setError(null);
             
-            const data = await invoke<Notice[]>('get_notices_from_supabase');
+            const data = await invoke<Notice[]>('get_notices_from_supabase', {
+                accessToken: token
+            });
             setNotices(data);
         } catch (err) {
             console.error('データ取得失敗:', err);
-            setError('お知らせの取得に失敗しました。');
+            setError(typeof err === 'string' ? err : 'お知らせの取得に失敗しました。');
         } finally {
             setLoading(false);
         }
@@ -76,7 +77,7 @@ export default function Home() {
 
     useEffect(() => {
         if (loginInfo) {
-            fetchNotices();
+            fetchNotices(loginInfo.accessToken);
         }
     }, [loginInfo]);
 

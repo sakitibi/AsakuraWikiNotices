@@ -30,7 +30,7 @@ fn get_env_var(env_content: &str, key: &str) -> Option<String> {
 }
 
 #[tauri::command]
-async fn get_notices_from_supabase() -> Result<Vec<Notice>, String> {
+async fn get_notices_from_supabase(accessToken: String) -> Result<Vec<Notice>, String> {
     let env_content = include_str!("../../../.env.local");
 
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
@@ -43,7 +43,7 @@ async fn get_notices_from_supabase() -> Result<Vec<Notice>, String> {
 
     let mut headers = HeaderMap::new();
     headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
-    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", supabase_anon_key)).map_err(|e| e.to_string())?);
+    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", accessToken)).map_err(|e| e.to_string())?);
 
     let client = reqwest::Client::new();
     let res = client
@@ -52,6 +52,11 @@ async fn get_notices_from_supabase() -> Result<Vec<Notice>, String> {
         .send()
         .await
         .map_err(|e| format!("通信エラー: {}", e))?;
+
+    if !res.status().is_success() {
+        let err_text = res.text().await.unwrap_or_default();
+        return Err(format!("Supabaseエラー ({}): {}", res.status(), err_text));
+    }
 
     let notices = res
         .json::<Vec<Notice>>()

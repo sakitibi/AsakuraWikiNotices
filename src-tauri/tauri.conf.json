@@ -29,7 +29,9 @@
                 "urlAssociations": [
                     {
                         "role": "Viewer",
-                        "schemes": ["asakurawiki"]
+                        "schemes": [
+                            "asakurawiki"
+                        ]
                     }
                 ]
             },

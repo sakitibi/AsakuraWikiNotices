@@ -24,7 +24,6 @@ struct Notice {
 struct UserResponse {
     id: String,
     email: Option<String>,
-    // メタデータ（ユーザー名などが入る場所）
     user_metadata: Option<serde_json::Value>,
 }
 
@@ -63,8 +62,10 @@ async fn clear_supabase_session(session_state: tauri::State<'_, SupabaseSession>
 
 #[tauri::command]
 async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession>) -> Result<UserResponse, String> {
-    let token_guard = session_state.access_token.lock().unwrap();
-    let access_token = token_guard.as_ref().ok_or_else(|| "セッションがありません".to_string())?;
+    let access_token = {
+        let token_guard = session_state.access_token.lock().unwrap();
+        token_guard.as_ref().ok_or_else(|| "セッションがありません".to_string())?.clone()
+    };
 
     let env_content = include_str!("../../../.env.local");
     let supabase_url_base = get_env_var(env_content, "SUPABASE_URL")
@@ -85,7 +86,6 @@ async fn verify_supabase_session(session_state: tauri::State<'_, SupabaseSession
         return Err("無効なセッションです".to_string());
     }
 
-    // ユーザー情報をJSON構造体にパース
     let user_data = res.json::<UserResponse>().await.map_err(|e| format!("ユーザー情報の解析失敗: {}", e))?;
     Ok(user_data)
 }
@@ -105,8 +105,12 @@ async fn get_notices_from_supabase(session_state: tauri::State<'_, SupabaseSessi
     let mut headers = HeaderMap::new();
     headers.insert("apikey", HeaderValue::from_str(&supabase_anon_key).map_err(|e| e.to_string())?);
 
-    let token_guard = session_state.access_token.lock().unwrap();
-    if let Some(access_token) = token_guard.as_ref() {
+    let maybe_token = {
+        let token_guard = session_state.access_token.lock().unwrap();
+        token_guard.clone()
+    };
+
+    if let Some(access_token) = maybe_token {
         headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", access_token)).map_err(|e| e.to_string())?);
     }
 

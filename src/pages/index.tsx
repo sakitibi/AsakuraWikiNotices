@@ -176,7 +176,7 @@ export default function Home() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <span style={{ fontSize: '0.9rem', color: '#4b5563' }}>👤 {user?.email}</span>
                             <button onClick={logout} style={{ padding: '0.5rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                                ログアウト
+                                <span>ログアウト</span>
                             </button>
                         </div>
                     )}
@@ -194,14 +194,15 @@ export default function Home() {
                         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
                         <h2>ログインが必要です</h2>
                         <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                            ブラウザで発行された6桁の認証コードを30秒以内に入力してください。
+                            ブラウザで発行された8桁の認証コードを30秒以内に入力してください。
                         </p>
 
                         <form onSubmit={handleCodeSubmit} style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                             <input
                                 type="text"
                                 placeholder="Ab12Xy"
-                                maxLength={6}
+                                maxLength={8}
+                                minLength={8}
                                 value={pinCode}
                                 onChange={(e) => setPinCode(e.target.value.replace(/[^0-9a-zA-Z]/g, ''))}
                                 style={{ 
@@ -212,13 +213,20 @@ export default function Home() {
                                     width: '160px',
                                     border: '1px solid #d1d5db', 
                                     borderRadius: '4px',
-                                    fontFamily: 'monospace'
                                 }}
                             />
                             <button 
                                 type="submit" 
-                                disabled={pinCode.length !== 6} 
-                                style={{ padding: '0.5rem 1.2rem', background: pinCode.length === 6 ? '#2563eb' : '#9ca3af', color: 'white', border: 'none', borderRadius: '4px', cursor: pinCode.length === 6 ? 'pointer' : 'default', fontWeight: 'bold' }}
+                                disabled={pinCode.length !== 8} 
+                                style={{
+                                    padding: '0.5rem 1.2rem',
+                                    background: pinCode.length === 8 ? '#2563eb' : '#9ca3af',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: pinCode.length === 8 ? 'pointer' : 'default',
+                                    fontWeight: 'bold'
+                                }}
                             >
                                 <span>認証</span>
                             </button>

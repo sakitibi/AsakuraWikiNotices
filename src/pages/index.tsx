@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
+import Head from 'next/head';
 
 interface Notice {
     id: string;
@@ -84,55 +85,61 @@ export default function Home() {
     }, []);
 
     return (
-        <div className="container">
-            <header className="header">
-                <h1>📢 お知らせ一覧</h1>
-            </header>
+        <>
+            <Head>
+                <title>お知らせ一覧</title>
+                <link rel="stylesheet" href="https://sakitibi.github.io/static.asakurawiki.com/css/noticeapps/index.static.css" />
+            </Head>
+            <div className="container">
+                <header className="header">
+                    <h1>お知らせ一覧</h1>
+                </header>
 
-            {loginInfo && (
-                <div style={{
-                    background: '#10b981',
-                    color: 'white',
-                    padding: '1rem',
-                    borderRadius: '8px',
-                    marginBottom: '1.5rem',
-                    wordBreak: 'break-all'
-                }}>
-                    <h3>🔒 ログインに成功しました！</h3>
-                    <p><strong>Access Token:</strong> {loginInfo.accessToken.substring(0, 15)}...</p>
-                    <p><strong>Refresh Token:</strong> {loginInfo.refreshToken.substring(0, 15)}...</p>
-                </div>
-            )}
+                {loginInfo && (
+                    <div style={{
+                        background: '#10b981',
+                        color: 'white',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        marginBottom: '1.5rem',
+                        wordBreak: 'break-all'
+                    }}>
+                        <h3>🔒 ログインに成功しました！</h3>
+                        <p><strong>Access Token:</strong> {loginInfo.accessToken.substring(0, 15)}...</p>
+                        <p><strong>Refresh Token:</strong> {loginInfo.refreshToken.substring(0, 15)}...</p>
+                    </div>
+                )}
 
-            {loading ? (
-                <div className="centerMessage">
-                    <div className="spinner"></div>
-                    <p>情報を読み込み中...</p>
-                </div>
-            ) : error ? (
-                <p className="centerMessage" style={{ color: '#ef4444' }}>{error}</p>
-            ) : notices.length === 0 ? (
-                <p className="centerMessage">現在、新しいお知らせはありません。</p>
-            ) : (
-                <div className="noticeList">
-                    {notices.map((notice) => (
-                        <article key={notice.id} className="noticeCard">
-                            <div className="cardMeta">
-                                <span className="badge">NEW</span>
-                                <time className="date">
-                                    {new Date(notice.created_at).toLocaleDateString('ja-JP', {
-                                        year: 'numeric',
-                                        month: '2-digit',
-                                        day: '2-digit',
-                                    })}
-                                </time>
-                            </div>
-                            <h2 className="cardTitle">{notice.title}</h2>
-                            <p className="cardContent">{notice.content}</p>
-                        </article>
-                    ))}
-                </div>
-            )}
-        </div>
+                {loading ? (
+                    <div className="centerMessage">
+                        <div className="spinner"></div>
+                        <p>情報を読み込み中...</p>
+                    </div>
+                ) : error ? (
+                    <p className="centerMessage" style={{ color: '#ef4444' }}>{error}</p>
+                ) : notices.length === 0 ? (
+                    <p className="centerMessage">現在、新しいお知らせはありません。</p>
+                ) : (
+                    <div className="noticeList">
+                        {notices.map((notice) => (
+                            <article key={notice.id} className="noticeCard">
+                                <div className="cardMeta">
+                                    <span className="badge">NEW</span>
+                                    <time className="date">
+                                        {new Date(notice.created_at).toLocaleDateString('ja-JP', {
+                                            year: 'numeric',
+                                            month: '2-digit',
+                                            day: '2-digit',
+                                        })}
+                                    </time>
+                                </div>
+                                <h2 className="cardTitle">{notice.title}</h2>
+                                <p className="cardContent">{notice.content}</p>
+                            </article>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </>
     );
 }
